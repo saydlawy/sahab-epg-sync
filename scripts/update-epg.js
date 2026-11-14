@@ -98,6 +98,7 @@ function decodeXml(s) {
   const epgChannelSource = {}; // { epgId: sourceName }
 
   // Sort sources by priority (lower = higher priority)
+  const SKIP_SOURCES = new Set(['EG1']); // no real programmes
   const sourceEntries = Object.entries(cfg)
     .filter(([, m]) => m && m.url)
     .sort((a, b) => (a[1].priority || 99) - (b[1].priority || 99));
