@@ -122,7 +122,7 @@ function decodeXml(s) {
     while ((pm = progRe.exec(raw))) {
       const [, startStr, stopStr, chId, body] = pm;
       if (!epgIdsToFetch.has(chId)) continue;
-      if (epgByChannel[chId] !== undefined) continue; // already covered by higher-priority source
+      if (epgChannelSource[chId] && epgChannelSource[chId] !== name) continue; // already covered by higher-priority source
       const start = parseXmltvDate(startStr);
       const end = parseXmltvDate(stopStr);
       if (end < minEndSec) continue;
