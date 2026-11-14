@@ -1,0 +1,16 @@
+{
+  "name": "sahab-epg-sync",
+  "version": "1.0.0",
+  "description": "Daily EPG sync for Sahab IPTV — updates Firestore with fresh EPG metadata",
+  "main": "scripts/update-epg.js",
+  "scripts": {
+    "sync": "node scripts/update-epg.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "firebase-admin": "^14.5.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
