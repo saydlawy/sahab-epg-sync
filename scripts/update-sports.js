@@ -113,9 +113,9 @@ function parseFixture(obj, league, nowMs) {
   const homeScore = obj.homeTeamScore ?? obj.homeScore ?? null;
   const awayScore = obj.awayTeamScore ?? obj.awayScore ?? null;
   const minute = String(obj.matchElapsed || obj.minute || '').trim() || null;
-  const stadium = String(obj.stadium || obj.venue || '').trim() || 'غير محدد';
-  const homeLogo = String(obj.homeTeamLogo || homeObj.logo || '');
-  const awayLogo = String(obj.awayTeamLogo || awayObj.logo || '');
+  const stadium = String(obj.matchStadium || obj.stadium || obj.venue || '').trim() || 'غير محدد';
+  const homeLogo = String(obj.teamHomeBadge || obj.homeTeamLogo || homeObj.badge || homeObj.logo || '');
+  const awayLogo = String(obj.teamAwayBadge || obj.awayTeamLogo || awayObj.badge || awayObj.logo || '');
 
   return {
     id: stableId(`${league.leagueId}_${rawId}`),
@@ -145,16 +145,18 @@ function parseStanding(obj, leagueId, fallbackRank) {
   const teamObj = obj.team || {};
   const teamName = String(obj.teamName || teamObj.name || '').trim();
   if (!teamName) return null;
-  const played = Number(obj.played ?? 0);
-  const win = Number(obj.won ?? obj.win ?? 0);
-  const draw = Number(obj.drawn ?? obj.draw ?? 0);
-  const loss = Number(obj.lost ?? obj.loss ?? 0);
-  const gf = Number(obj.goalsFor ?? 0);
-  const ga = Number(obj.goalsAgainst ?? 0);
+  const played = Number(obj.overallLeaguePlayed ?? obj.played ?? 0);
+  const win = Number(obj.overallLeagueW ?? obj.won ?? obj.win ?? 0);
+  const draw = Number(obj.overallLeagueD ?? obj.drawn ?? obj.draw ?? 0);
+  const loss = Number(obj.overallLeagueL ?? obj.lost ?? obj.loss ?? 0);
+  const gf = Number(obj.overallLeagueGF ?? obj.goalsFor ?? 0);
+  const ga = Number(obj.overallLeagueGA ?? obj.goalsAgainst ?? 0);
   const gd = obj.goalDifference !== undefined && obj.goalDifference !== null ? Number(obj.goalDifference) : (gf - ga);
+  const rank = Number(obj.overallLeaguePosition ?? obj.position ?? obj.rank ?? fallbackRank);
+  const points = Number(obj.overallLeaguePTS ?? obj.points ?? 0);
   return {
     leagueId,
-    rank: Number(obj.position ?? obj.rank ?? fallbackRank),
+    rank,
     teamName,
     played,
     win,
@@ -163,7 +165,7 @@ function parseStanding(obj, leagueId, fallbackRank) {
     goalsFor: gf,
     goalsAgainst: ga,
     goalDifference: gd,
-    points: Number(obj.points ?? 0),
+    points,
   };
 }
 
@@ -176,30 +178,31 @@ function parseStanding(obj, leagueId, fallbackRank) {
   let totalStandings = 0;
   let failedLeagues = 0;
 
+  const minDate = new Date(now - 30 * 86400_000).toISOString().slice(0, 10);
+  const maxDate = new Date(now + 60 * 86400_000).toISOString().slice(0, 10);
+
   for (const league of LEAGUES) {
     try {
-      const matches = [];
-      for (let page = 1; page <= MAX_PAGES; page++) {
+      const byId = new Map();
+      for (let page = 1; page <= 15; page++) {
         const url = `${BASE_URL}/leagues/${league.nanoid}/fixtures?page=${page}&limit=${PAGE_SIZE}`;
         const root = await fetchJson(url);
         const arr = extractArray(root, 'fixtures');
+        if (arr.length === 0) break;
         for (const item of arr) {
           const parsed = parseFixture(item, league, now);
-          if (parsed) matches.push(parsed);
+          if (parsed) byId.set(parsed.id, parsed);
         }
         if (arr.length < PAGE_SIZE) break;
       }
 
-      if (league.leagueId === 39 && matches.length > 0) {
-        const firstRoot = await fetchJson(`${BASE_URL}/leagues/${league.nanoid}/fixtures?page=1&limit=1`);
-        const firstArr = extractArray(firstRoot, 'fixtures');
-        if (firstArr[0]) console.log('RAW_FIXTURE_SAMPLE:', JSON.stringify(firstArr[0]));
-      }
+      const allMatches = Array.from(byId.values());
+      const windowMatches = allMatches.filter(m => m.status === 'LIVE' || (m.date >= minDate && m.date <= maxDate));
+      const matches = (windowMatches.length > 0 ? windowMatches : allMatches.slice(0, 200))
+        .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+
       const standingsRoot = await fetchJson(`${BASE_URL}/leagues/${league.nanoid}/standings`);
       const standingsArr = extractArray(standingsRoot, 'standings');
-      if (league.leagueId === 39 && standingsArr[0]) {
-        console.log('RAW_STANDING_SAMPLE:', JSON.stringify(standingsArr[0]));
-      }
       const standings = standingsArr
         .map((item, idx) => parseStanding(item, league.leagueId, idx + 1))
         .filter(Boolean);
