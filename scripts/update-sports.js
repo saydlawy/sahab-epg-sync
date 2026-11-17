@@ -80,18 +80,27 @@ function extractArray(root, nestedKey) {
   return Array.isArray(root[nestedKey]) ? root[nestedKey] : [];
 }
 
-async function fetchJson(url) {
-  const res = await axios.get(url, {
-    timeout: 30000,
-    headers: {
-      Authorization: `Bearer ${GOAL_API_KEY}`,
-      Accept: 'application/json',
-    },
-  });
-  if (res.data && res.data.success === false) {
-    throw new Error(res.data.error?.message || 'Goal API error');
+async function fetchJson(url, retries = 3) {
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      const res = await axios.get(url, {
+        timeout: 30000,
+        headers: {
+          Authorization: `Bearer ${GOAL_API_KEY}`,
+          Accept: 'application/json',
+        },
+      });
+      if (res.data && res.data.success === false) {
+        throw new Error(res.data.error?.message || 'Goal API error');
+      }
+      return res.data;
+    } catch (e) {
+      lastErr = e;
+      if (i + 1 < retries) await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+    }
   }
-  return res.data;
+  throw lastErr;
 }
 
 function parseFixture(obj, league, nowMs) {
@@ -184,16 +193,20 @@ function parseStanding(obj, leagueId, fallbackRank) {
   for (const league of LEAGUES) {
     try {
       const byId = new Map();
-      for (let page = 1; page <= 15; page++) {
-        const url = `${BASE_URL}/leagues/${league.nanoid}/fixtures?page=${page}&limit=${PAGE_SIZE}`;
+      let offset = 0;
+      for (let page = 0; page < 20; page++) {
+        const url = `${BASE_URL}/leagues/${league.nanoid}/fixtures?limit=${PAGE_SIZE}&offset=${offset}`;
         const root = await fetchJson(url);
         const arr = extractArray(root, 'fixtures');
         if (arr.length === 0) break;
+        const before = byId.size;
         for (const item of arr) {
           const parsed = parseFixture(item, league, now);
           if (parsed) byId.set(parsed.id, parsed);
         }
-        if (arr.length < PAGE_SIZE) break;
+        const hasMore = Boolean(root?.pagination?.hasMore);
+        offset += arr.length;
+        if (!hasMore || byId.size === before) break;
       }
 
       const allMatches = Array.from(byId.values());
