@@ -52,6 +52,12 @@ function stableId(str) {
   return (h & 0x7fffffff) || 1;
 }
 
+function isTruthy(v) {
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') return ['true', '1', 'yes'].includes(v.trim().toLowerCase());
+  return false;
+}
+
 function mapStatus(raw, liveFlag) {
   if (liveFlag) return 'LIVE';
   const s = String(raw || '').trim().toUpperCase();
@@ -103,7 +109,7 @@ function parseFixture(obj, league, nowMs) {
   const date = datePart.length >= 10 ? datePart.slice(0, 10) : '';
   const time = tIdx >= 0 ? (kickoff.slice(tIdx + 1, tIdx + 6) || '17:00') : '17:00';
 
-  const status = mapStatus(obj.matchStatus || obj.status, Boolean(obj.matchLive));
+  const status = mapStatus(obj.matchStatus || obj.status, isTruthy(obj.matchLive));
   const homeScore = obj.homeTeamScore ?? obj.homeScore ?? null;
   const awayScore = obj.awayTeamScore ?? obj.awayScore ?? null;
   const minute = String(obj.matchElapsed || obj.minute || '').trim() || null;
@@ -184,8 +190,16 @@ function parseStanding(obj, leagueId, fallbackRank) {
         if (arr.length < PAGE_SIZE) break;
       }
 
+      if (league.leagueId === 39 && matches.length > 0) {
+        const firstRoot = await fetchJson(`${BASE_URL}/leagues/${league.nanoid}/fixtures?page=1&limit=1`);
+        const firstArr = extractArray(firstRoot, 'fixtures');
+        if (firstArr[0]) console.log('RAW_FIXTURE_SAMPLE:', JSON.stringify(firstArr[0]));
+      }
       const standingsRoot = await fetchJson(`${BASE_URL}/leagues/${league.nanoid}/standings`);
       const standingsArr = extractArray(standingsRoot, 'standings');
+      if (league.leagueId === 39 && standingsArr[0]) {
+        console.log('RAW_STANDING_SAMPLE:', JSON.stringify(standingsArr[0]));
+      }
       const standings = standingsArr
         .map((item, idx) => parseStanding(item, league.leagueId, idx + 1))
         .filter(Boolean);
